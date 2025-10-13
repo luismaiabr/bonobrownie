@@ -1,8 +1,9 @@
 from typing import List
-from app.api.src.schemas.produto import EstoqueRequest,CategoriaEmEstoque
+from app.api.src.schemas.produto import EstoqueRequest,CategoriaEmEstoque,AtualizarEstoqueRequest
 import requests
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import json
+from fastapi import APIRouter, HTTPException, status
 from fastapi import APIRouter
 import os
 from dotenv import load_dotenv
@@ -151,11 +152,148 @@ def obter_estoque_atual(
     summary="Obter Estoque Atual por Categoria",
     description="Retorna a quantidade atual de cada categoria de produto em estoque."
 )
-def obter_estoque_por_categoria():
-    """
-    Endpoint para buscar a quantidade em estoque de todas as categorias de produtos.
 
-    Returns:
-        List[Dict[str, Any]]: Uma lista de dicionários, cada um contendo 'categoria' e 'quantidade'.
+def _obter_ultimo_preco_unitario(categoria: str) -> Optional[float]:
     """
-    return estoque_por_categoria()
+    Busca o último 'preco_unitario' conhecido para a categoria no Supabase.
+    """
+    table_name = "Estoque"
+    headers = _get_headers()
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/{table_name}?categoria=eq.{categoria}&select=preco_unitario"
+        response = requests.get(url, headers=headers, timeout=10.0)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data:
+            return data[0].get("preco_unitario")
+        return None
+
+    except requests.exceptions.RequestException as e:
+        print(f"Alerta: Falha ao buscar preço unitário no Supabase: {e}")
+        return None
+
+@router.post(
+    "/atualizar_estoque",
+    status_code=status.HTTP_200_OK,  # Melhor que 201 para UPSERT
+    summary="Atualiza o estoque de uma categoria de produto (UPSERT)",
+    description="Cria um novo registro de estoque ou atualiza um existente com base na categoria."
+)
+def atualizar_estoque_por_categoria(req: AtualizarEstoqueRequest):
+    """
+    Endpoint para atualizar o estoque de uma categoria de produto no Supabase.
+    Esta função realiza um 'UPSERT'.
+    """
+    table_name = "Estoque"
+
+    preco_unitario_existente = _obter_ultimo_preco_unitario(req.categoria)
+    preco_para_uso = preco_unitario_existente if preco_unitario_existente is not None else 0.0
+
+    payload = {
+        "categoria": req.categoria,
+        "quantidade": req.quantidade,
+        "preco_unitario": preco_para_uso,
+        "observacao": "Atualizacao de estoque"
+    }
+
+    try:
+        headers = _get_headers()
+        headers["Prefer"] = "resolution=merge-duplicates"
+
+        # ✅ Adiciona on_conflict na URL
+        url = f"{SUPABASE_URL}/rest/v1/{table_name}?on_conflict=categoria"
+
+        response = requests.post(url, headers=headers, json=payload, timeout=15.0)
+        response.raise_for_status()
+
+        try:
+            data = response.json() if response.content else None
+        except ValueError:
+            data = None
+
+        return {
+            "message": f"Estoque da categoria '{req.categoria}' atualizado com sucesso.",
+            "data": data
+}
+
+
+    except requests.exceptions.HTTPError as e:
+        error_detail = e.response.text if e.response else str(e)
+        raise HTTPException(
+            status_code=e.response.status_code if e.response else 500,
+            detail=f"Erro do Supabase ao atualizar estoque: {error_detail}"
+        )
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Erro de comunicação: {e}"
+        )
+@router.post(
+    "/adicionar_ao_estoque",
+    status_code=status.HTTP_200_OK,
+    summary="Adiciona uma quantidade ao estoque de uma categoria (UPSERT)",
+    description="Adiciona a quantidade fornecida ao estoque existente ou cria um novo registro se ele não existir."
+)
+def adicionar_ao_estoque(req: AtualizarEstoqueRequest):
+    """
+    Endpoint para ADICIONAR uma quantidade ao estoque de uma categoria no Supabase.
+    """
+    table_name = "Estoque"
+    try:
+        # Tenta obter o estoque atual. Se não encontrar (404), considera como 0.
+        try:
+            estoque_atual = obter_estoque(req.categoria)
+        except StandardHTTPException as e:
+            if e.status_code == 404:
+                estoque_atual = 0
+            else:
+                raise  # Propaga outros erros
+
+        nova_quantidade = estoque_atual + req.quantidade
+        preco_unitario_existente = _obter_ultimo_preco_unitario(req.categoria)
+        preco_para_uso = preco_unitario_existente if preco_unitario_existente is not None else 0.0
+
+        payload = {
+            "categoria": req.categoria,
+            "quantidade": nova_quantidade,
+            "preco_unitario": preco_para_uso,
+            "observacao": f"Adicao de {req.quantidade} unidade(s) ao estoque"
+        }
+
+        headers = _get_headers()
+        headers["Prefer"] = "resolution=merge-duplicates"
+
+        # ✅ Adiciona on_conflict na URL
+        url = f"{SUPABASE_URL}/rest/v1/{table_name}?on_conflict=categoria"
+
+        response = requests.post(url, headers=headers, json=payload, timeout=15.0)
+        
+
+        
+        response.raise_for_status()
+        data = None
+        if response.status_code != 204 and response.text:
+            try:
+                data = response.json()
+            except json.JSONDecodeError:
+                # ✅ TRATA RESPOSTA INVÁLIDA DE FORMA MAIS CLARA
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"A API externa respondeu com um corpo não-JSON. Conteúdo: {response.text}"
+                )
+        
+        return {"message": f"Estoque da categoria '{req.categoria}' incrementado com sucesso.", "data": data}
+    except requests.exceptions.HTTPError as e:
+        error_detail = e.response.text if e.response else str(e)
+        raise HTTPException(status_code=e.response.status_code if e.response else 500, detail=f"Erro do Supabase ao adicionar ao estoque: {error_detail}")
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Erro de comunicação: {e}")
+
+# --- Bloco de Teste ---
+if __name__ == "__main__":
+
+    print("\n\n--- Iniciando teste para ADICIONAR ao estoque ---")
+    dados_adicao = {"categoria": "Pizza", "quantidade": 5}
+    dados_adicao = AtualizarEstoqueRequest(**dados_adicao)
+    adicionar_ao_estoque(dados_adicao)
+   

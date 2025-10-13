@@ -5,12 +5,15 @@ router = APIRouter()
 import requests
 from typing import Dict, Any
 import json
-from app.api.src.schemas.venda import Venda, VendaCreate
+from app.api.src.schemas.venda import Venda
+from app.api.src.routes.cobranca import criar_cobranca_de_venda,adicionar_cobranca
 import os
 from dotenv import load_dotenv
 load_dotenv()
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+
+
 class StandardHTTPException(Exception):
     """
     Exceção aprimorada para encapsular erros de requisição HTTP,
@@ -78,8 +81,10 @@ def registrar_nova_venda(venda: Venda) -> Dict[str, Any]:
         #    A API do Supabase espera uma lista de registros para inserção.
         payload = [venda.model_dump(mode="json")]
 
-        # 3. Executa a requisição POST para criar o novo registro
+        
         response = requests.post(url, headers=headers, json=payload, timeout=15.0)
+        cobranca = criar_cobranca_de_venda(venda)
+        adicionar_cobranca(cobranca)
 
         # 4. Reutiliza o padrão de tratamento de erros HTTP
         if response.status_code >= 400:

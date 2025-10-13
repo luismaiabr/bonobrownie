@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, status
 from typing import Optional
 import os
 from dotenv import load_dotenv
-
+from app.api.src.routes.vender import Venda
 router = APIRouter()
 
 # --- Configuração do Supabase ---
@@ -48,14 +48,28 @@ class CobrancaInput(BaseModel):
     valor: float
     status_pagamento: bool  # ✅ Nome correto!
     data_venda: Optional[datetime] = None  # Campo adicional opcional
+def criar_cobranca_de_venda(venda: Venda) -> CobrancaInput:
+    """
+    Cria um objeto CobrancaInput a partir de um objeto Venda,
+    mapeando os campos relevantes.
+    """
+    cobranca = CobrancaInput(
+        # Mapeamentos Diretos:
+        cliente=venda.cliente,
+        status_pagamento=venda.status_pagamento,
+        
+        # Mapeamento do Valor (valor_total de Venda para valor de CobrancaInput)
+        valor=venda.valor_total, 
+        
+        # Mapeamento da Data de Vencimento
+        # (data_vencimento de Venda para vencimento de CobrancaInput)
+        vencimento=venda.data_vencimento,
+        
+        # Mapeamento da Data da Venda (campo opcional em CobrancaInput)
+        data_venda=venda.data_venda 
+    )
+    return cobranca
 
-# --- Definição da Rota ---
-@router.post(
-    "/adicionar_cobranca",
-    status_code=status.HTTP_201_CREATED,
-    summary="Adiciona uma nova cobrança",
-    description="Cria um novo registro na tabela 'Cobranca' com os dados fornecidos."
-)
 def adicionar_cobranca(cobranca: CobrancaInput):
     """
     Recebe os dados de uma nova cobrança e os insere na tabela 'Cobranca' do Supabase.
