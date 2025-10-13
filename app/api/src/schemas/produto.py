@@ -5,7 +5,9 @@ from pydantic import BaseModel, Field
 class ProdutoBase(BaseModel):
     nome: str = Field(..., description="Nome do tipo de brownie, ex: Brownie Tradicional")
     valor_unitario: float = Field(..., gt=0, description="Valor de venda por unidade do brownie")
-
+class CategoriaEmEstoque(BaseModel):
+    categoria: str = Field(..., description="Categoria do produto")
+    quantidade_estoque: int = Field(..., ge=0, description="Quantidade atual em estoque")
 # Schema para criação de um novo produto (não inclui estoque inicial)
 class ProdutoCreate(ProdutoBase):
     pass

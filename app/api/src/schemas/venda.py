@@ -1,8 +1,6 @@
 # Venda schema
 from pydantic import BaseModel, Field, computed_field
-from datetime import date, timedelta
-from .cliente import Cliente
-from .produto import Produto
+from datetime import datetime
 from .msg import StatusPagamento
 # --- Schemas de Venda ---
 
@@ -22,31 +20,30 @@ class VendaCreate(VendaBase):
 # Schema para atualizar o status de uma cobrança
 class VendaUpdateStatus(BaseModel):
     status_pagamento: StatusPagamento = Field(..., description="Novo status do pagamento")
-
-
-# Schema completo para leitura (usado no Histórico e nas Cobranças)
-# Este schema é mais rico, incluindo objetos aninhados e campos calculados
-class Venda(VendaBase):
+class CategoriaSchema(BaseModel):
+    categoria: str = Field(..., description="Categoria do produto para filtrar o histórico")
+class Venda(BaseModel):
+    # --- Campos que espelham a tabela do Supabase ---
     id: int
-    data_venda: date
-    status_pagamento: StatusPagamento
-    valor_unitario: float # Valor no momento da venda
+    
+    # Corrigido para datetime para ser compatível com timestamptz
+    data_venda: datetime
+    
+    status_pagamento: bool
+    cliente: str
+    categoria_produto: str
+    
+    # Adicionado o campo que estava faltando
+    qtd_unidades: int
+    
+    # Corrigido para ser um campo normal, lido do banco
+    data_vencimento: datetime
+    
+    valor_unitario: float
+    
+    # Corrigido para ser um campo normal, lido do banco
+    valor_total: float
 
-    # Inclui os dados completos do cliente e do produto para fácil exibição no frontend
-    cliente: Cliente
-    produto: Produto
-
-    # Campo calculado para o valor total (Unidades * Valor Unitário)
-    @computed_field
-    @property
-    def valor_total(self) -> float:
-        return self.unidades * self.valor_unitario
-
-    # Campo calculado para a data de vencimento (Data da Venda + Prazo)
-    @computed_field
-    @property
-    def data_vencimento(self) -> date:
-        return self.data_venda + timedelta(days=self.prazo_dias)
-
+    # Configuração para permitir a criação do modelo a partir de um objeto de banco de dados
     class Config:
         from_attributes = True
