@@ -1,6 +1,3 @@
-# Entry point for brownie_api
-# src/brownie_api/api/v1/api.py
-
 from fastapi import APIRouter, FastAPI # Import FastAPI
 # NOTE: Adjust the import path for your endpoints based on your actual file structure
 from app.api.src.routes.atualizar_estoque import router as atualizar_estoque_router

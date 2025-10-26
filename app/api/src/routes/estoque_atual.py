@@ -1,5 +1,5 @@
 from typing import List
-from app.api.src.schemas.produto import EstoqueRequest,CategoriaEmEstoque,AtualizarEstoqueRequest
+from app.api.src.schemas.produto import EstoqueRequest,AtualizarEstoqueRequest,PrecoUnitarioRequest
 import requests
 from typing import Dict, Any, Optional
 import json
@@ -147,11 +147,7 @@ def obter_estoque_atual(
     """
     return obter_estoque(req.categoria)
 
-@router.get(
-    "/estoque_por_categoria/",
-    summary="Obter Estoque Atual por Categoria",
-    description="Retorna a quantidade atual de cada categoria de produto em estoque."
-)
+
 
 def _obter_ultimo_preco_unitario(categoria: str) -> Optional[float]:
     """
@@ -289,6 +285,107 @@ def adicionar_ao_estoque(req: AtualizarEstoqueRequest):
     except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Erro de comunicação: {e}")
 
+@router.get(
+    "/categorias_estoque",
+    summary="Obter todas as categorias do estoque",
+    description="Retorna uma lista com os nomes de todas as categorias de produtos existentes no estoque.",
+    response_model=List[str]
+)
+def get_categorias_estoque():
+    """
+    Endpoint para buscar todas as categorias de produtos no estoque.
+    """
+    table_name = "Estoque"
+    try:
+        headers = _get_headers()
+        url = f"{SUPABASE_URL}/rest/v1/{table_name}"
+        params = {"select": "categoria"}
+        
+        response = requests.get(url, headers=headers, params=params, timeout=15.0)
+        response.raise_for_status()
+        
+        data = response.json()
+        categorias = [item['categoria'] for item in data]
+        
+        return categorias
+
+    except requests.exceptions.HTTPError as e:
+        error_detail = e.response.text if e.response else str(e)
+        raise HTTPException(status_code=e.response.status_code if e.response else 500, detail=f"Erro do Supabase: {error_detail}")
+    except requests.exceptions.RequestException as req_err:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Erro de comunicação: {req_err}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro inesperado: {e}")
+@router.get('/estoque')
+def estoque_por_categoria() -> List[Dict[str, Any]]:
+    """
+    Obtém uma lista com a quantidade em estoque para cada categoria de produto.
+
+    Returns:
+        Uma lista de dicionários, onde cada dicionário contém a 'categoria'
+        e a 'quantidade' em estoque. Ex: [{'categoria': 'Brownie', 'quantidade': 50}]
+    """
+    table_name = "Estoque"
+    try:
+        headers = _get_headers()
+        url = f"{SUPABASE_URL}/rest/v1/{table_name}"
+        
+        # Modificação: Seleciona as colunas 'categoria' e 'quantidade' para todos os registros.
+        # Não há filtro por uma categoria específica.
+        params = {"select": "categoria,quantidade"}
+        
+        response = requests.get(url, headers=headers, params=params, timeout=15.0)
+
+        if response.status_code >= 400:
+            try:
+                detail = response.json()
+            except json.JSONDecodeError:
+                detail = {"message": response.text}
+            raise StandardHTTPException(detail=detail, status_code=response.status_code)
+        
+        # A API já retorna uma lista de dicionários no formato desejado.
+        return response.json()
+
+    except requests.exceptions.RequestException as req_err:
+        raise StandardHTTPException(detail={"message": f"Erro de conexão: {req_err}"}, status_code=503)
+    except Exception as e:
+        if isinstance(e, StandardHTTPException):
+            raise
+        raise StandardHTTPException(detail={"message": f"Erro inesperado: {e}"}, status_code=500)
+
+@router.post(
+    "/preco_unitario",
+    response_model=float,
+    status_code=status.HTTP_200_OK,
+    summary="Obtém o preço unitário de uma categoria",
+    description="Busca e retorna o último preço unitário registrado para a categoria fornecida."
+)
+def obter_preco_unitario(req: PrecoUnitarioRequest):
+    """
+    Endpoint para obter o último preço unitário de uma categoria no Supabase.
+    """
+    try:
+        # Utiliza a função auxiliar para buscar o preço
+        preco_unitario = _obter_ultimo_preco_unitario(req.categoria)
+
+        # Se a função retornar None, significa que a categoria não foi encontrada
+        if preco_unitario is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"A categoria '{req.categoria}' não foi encontrada no estoque."
+            )
+        
+        return preco_unitario
+
+    except HTTPException as e:
+        # Re-propaga a exceção HTTP já tratada (como o 404 acima)
+        raise e
+    except Exception as e:
+        # Captura qualquer outro erro inesperado durante a execução
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ocorreu um erro interno ao buscar o preço unitário: {str(e)}"
+        )
 # --- Bloco de Teste ---
 if __name__ == "__main__":
 

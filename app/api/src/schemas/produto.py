@@ -30,8 +30,10 @@ class EstoqueRequest(BaseModel):
 class AtualizarEstoqueRequest(BaseModel):
     categoria: str = Field(..., description="Categoria do produto")
     quantidade: int  = Field (...,description="Quantidade alvo")
-from pydantic import BaseModel, Field
 
+class PrecoUnitarioRequest(BaseModel):
+    """Modelo para a requisição do preço unitário de uma categoria."""
+    categoria: str
 class EstoqueRequest(BaseModel):
     """
     Schema para a requisição de obtenção de estoque de uma categoria.
@@ -43,7 +45,7 @@ class AtualizarEstoqueRequest(BaseModel):
     Schema para a requisição de atualização de estoque de uma categoria.
     """
     categoria: str = Field(..., example="Pizza", description="Nome da categoria do produto a ser atualizada.")
-    quantidade: int = Field(..., gt=0, example=10, description="A nova quantidade total em estoque para a categoria.")
+    quantidade: int = Field(..., example=10, description="A nova quantidade total em estoque para a categoria.")
 
 # src/brownie_api/schemas/produto.py
 

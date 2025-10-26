@@ -5,8 +5,11 @@ router = APIRouter()
 import requests
 from typing import Dict, Any
 import json
+from app.api.src.schemas.produto import AtualizarEstoqueRequest
+from app.api.src.routes.estoque_atual import adicionar_ao_estoque
 from app.api.src.schemas.venda import Venda
 from app.api.src.routes.cobranca import criar_cobranca_de_venda,adicionar_cobranca
+from app.api.src.routes.estoque_atual import _obter_ultimo_preco_unitario
 import os
 from dotenv import load_dotenv
 load_dotenv()
@@ -72,6 +75,8 @@ def registrar_nova_venda(venda: Venda) -> Dict[str, Any]:
                                erro de conexão ou outro erro inesperado.
     """
     table_name = "Venda"
+    if not venda.valor_unitario:
+        venda.valor_unitario = _obter_ultimo_preco_unitario(venda.categoria_produto)
     try:
         # 1. Reutiliza a função para obter os cabeçalhos de autenticação
         headers = _get_headers()
@@ -127,4 +132,8 @@ def registrar_venda(
     - **prazo_dias**: Prazo em dias para o pagamento.
     - **valor_unitario**: Preço do produto no momento da venda.
     """
+    print(venda_in)
     registrar_nova_venda(venda_in)
+    req = AtualizarEstoqueRequest(categoria=venda_in.categoria_produto,quantidade=-venda_in.qtd_unidades)
+    adicionar_ao_estoque(req)
+

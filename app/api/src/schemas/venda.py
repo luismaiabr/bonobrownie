@@ -2,6 +2,7 @@
 from pydantic import BaseModel, Field, computed_field
 from datetime import datetime
 from .msg import StatusPagamento
+from typing import Optional 
 # --- Schemas de Venda ---
 
 # Schema base com os campos que vêm do request de criação
@@ -23,26 +24,33 @@ class VendaUpdateStatus(BaseModel):
 class CategoriaSchema(BaseModel):
     categoria: str = Field(..., description="Categoria do produto para filtrar o histórico")
 class Venda(BaseModel):
-    # --- Campos que espelham a tabela do Supabase ---
-    id: int
-    
-    # Corrigido para datetime para ser compatível com timestamptz
-    data_venda: datetime
-    
-    status_pagamento: bool
     cliente: str
     categoria_produto: str
+    qtd_unidades: int
+    # 1. Use Optional[float] para permitir None
+    # 2. Defina um valor padrão, como None, para torná-lo opcional
+    valor_unitario: Optional[float] = None # OU: valor_unitario: float | None = None
+    status_pagamento: bool
+    data_venda: datetime
+    data_vencimento: datetime
+    valor_total: float
+    # Corrigido para datetime para ser compatível com timestamptz
+    
+    
+    
+    
+    
     
     # Adicionado o campo que estava faltando
-    qtd_unidades: int
+    
     
     # Corrigido para ser um campo normal, lido do banco
-    data_vencimento: datetime
     
-    valor_unitario: float
+    
+    
     
     # Corrigido para ser um campo normal, lido do banco
-    valor_total: float
+    
 
     # Configuração para permitir a criação do modelo a partir de um objeto de banco de dados
     class Config:
